@@ -4,6 +4,7 @@ import os
 from terminator import (
     cleanup,
     logger,
+    get_regions,
 )
 
 
@@ -24,4 +25,6 @@ def lambda_handler(event, context):
     api_name = os.environ['API_NAME']
     test_account_id = os.environ['TEST_ACCOUNT_ID']
 
-    cleanup(stage, check=False, force=False, api_name=api_name, test_account_id=test_account_id)
+    aws_regions = get_regions()
+    for region in aws_regions:
+        cleanup(stage, check=False, force=False, api_name=api_name, test_account_id=test_account_id, region=region)

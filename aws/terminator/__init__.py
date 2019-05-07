@@ -23,7 +23,23 @@ def import_plugins():
         __import__(f'terminator.{import_name}')
 
 
-def cleanup(stage, check, force, api_name, test_account_id):
+def get_region_restrictions():
+    """ Get regions specific for each service so unsupported regions for services and global services can be skipped
+    :rtype: dict [str, list]
+    """
+    restricted_regions = {}
+    session = boto3.Session()
+    services = session.get_available_services()
+    for service in services:
+        restricted_regions[service] = session.get_available_regions(service)
+    return restricted_regions
+
+
+def get_regions():
+    return boto3.Session().get_available_regions('ec2')
+
+
+def cleanup(stage, check, force, api_name, test_account_id, region):
     """
     :type stage: str
     :type check: bool
@@ -31,8 +47,15 @@ def cleanup(stage, check, force, api_name, test_account_id):
     :type api_name: str
     :type test_account_id: str
     """
+    # Set globals for each region
+    AWS_REGION = region
+    global kvs
+    kvs = KeyValueStore()
+
     kvs.domain_name = re.sub(r'[^a-zA-Z0-9]+', '_', f'{api_name}-resources-{stage}')
     kvs.initialize()
+
+    logger.info('Cleaning up region: %s' % AWS_REGION)
 
     cleanup_test_account(stage, check, force, api_name, test_account_id)
     cleanup_database(check, force)
@@ -286,6 +309,9 @@ class Terminator(abc.ABC):
         :type describe_lambda: lambda
         :rtype: list[Terminator]
         """
+        if AWS_REGION not in restricted_regions[client_name]:
+            return []
+
         client = session.client(client_name, region_name=AWS_REGION)
         instances = describe_lambda(client)
         terminators = [instance_type(client, instance) for instance in instances]
@@ -467,5 +493,7 @@ class KeyValueStore:
 
 
 import_plugins()
+
+restricted_regions = get_region_restrictions()
 
 kvs = KeyValueStore()
